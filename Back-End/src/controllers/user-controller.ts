@@ -21,9 +21,9 @@ export const userSignUp = async (req: Request, res: Response, next: NextFunction
         const { name, email, password } = req.body;
         const hashPassword = await hash(password, 10);
         const existingUser = await User.findOne({ email })
-        if(existingUser) return res.status(401).send("User already exists");
+        if (existingUser) return res.status(401).send("User already exists");
 
-        const user = new User({ name, email, password:hashPassword });
+        const user = new User({ name, email, password: hashPassword });
         await user.save();
 
         // Create token and store cookie
@@ -45,7 +45,7 @@ export const userSignUp = async (req: Request, res: Response, next: NextFunction
             signed: true
         })
 
-        return res.status(201).json({ message: "OK", id: user._id.toString() })
+        return res.status(201).json({ message: "OK", name: user.name, email: user.email })
     }
     catch (error) {
         console.log(error);
@@ -57,10 +57,10 @@ export const userLogin = async (req: Request, res: Response, next: NextFunction)
     try {
         const { email, password } = req.body;
         const user = await User.findOne({ email });
-        if(!user) return res.status(401).send("User not found");
+        if (!user) return res.status(401).send("User not found");
 
         const isPasswordCorrect = await compare(password, user.password);
-        if(!isPasswordCorrect) {
+        if (!isPasswordCorrect) {
             return res.status(401).send("Incorrect Password");
         }
 
@@ -82,10 +82,58 @@ export const userLogin = async (req: Request, res: Response, next: NextFunction)
             signed: true
         })
 
-        return res.status(201).json({ message: "OK", id: user._id.toString() })
+        return res.status(200).json({ message: "OK", name: user.name, email: user.email })
     }
     catch (error) {
         console.log(error);
         return res.status(500).json({ message: "Error", error })
     }
 }
+
+export const verifyUser = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const user = await User.findById(res.locals.jwtData.id);
+        if (!user) return res.status(401).send("User not registered or Token malfunctioned");
+
+        if (user._id.toString() !== res.locals.jwtData.id) {
+            return res.status(401).send("Permissions didn't match");
+        }
+
+        return res.status(200).json({ message: "OK", name: user.name, email: user.email })
+    }
+    catch (error) {
+        console.log(error);
+        return res.status(500).json({ message: "Error", error })
+    }
+}
+
+export const userLogout = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        //user token check
+        const user = await User.findById(res.locals.jwtData.id);
+        if (!user) {
+            return res.status(401).send("User not registered OR Token malfunctioned");
+        }
+        if (user._id.toString() !== res.locals.jwtData.id) {
+            return res.status(401).send("Permissions didn't match");
+        }
+
+        res.clearCookie(COOKIE_NAME, {
+            httpOnly: true,
+            domain: "localhost",
+            signed: true,
+            path: "/",
+        });
+
+        return res
+            .status(200)
+            .json({ message: "OK", name: user.name, email: user.email });
+    } catch (error) {
+        console.log(error);
+        return res.status(200).json({ message: "ERROR", cause: error.message });
+    }
+};
